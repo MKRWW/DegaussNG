@@ -176,6 +176,8 @@ rescales it. `app.manifest` declares `PerMonitorV2` DPI awareness.
 
 ### Sound (`tools/SoundSynth`)
 
+The sound design and timing in this section are replaced by `specs/0002-degauss-sound-rework.md`.
+
 `dotnet run --project tools/SoundSynth -- assets/sounds` writes `degauss.wav`. `DegaussSound.Render()`
 returns `short[]`, 44100 Hz, 16-bit PCM, mono, exactly 2.2 seconds (97020 samples).
 

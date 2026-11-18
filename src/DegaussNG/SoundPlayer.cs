@@ -15,6 +15,9 @@ internal sealed class SoundPlayer
 {
     private const string ResourceName = "DegaussNG.assets.sounds.degauss.wav";
 
+    // A short output buffer keeps the thump in step with the picture.
+    private const int DesiredLatencyMilliseconds = 120;
+
     private readonly List<Session> _sessions = new();
 
     public void Play(double volume)
@@ -34,6 +37,7 @@ internal sealed class SoundPlayer
             session.Player.PlaybackStopped += OnPlaybackStopped;
             _sessions.Add(session);
 
+            session.Player.DesiredLatency = DesiredLatencyMilliseconds;
             session.Player.Init(session.Reader);
             session.Player.Volume = (float)volume;
             session.Player.Play();

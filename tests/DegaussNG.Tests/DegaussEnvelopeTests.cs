@@ -7,6 +7,10 @@ public sealed class DegaussEnvelopeTests
 {
     private const double Tolerance = 1e-12;
 
+    private static int DelayMillisecond => (int)Math.Round(DegaussEnvelope.DelaySeconds * 1000.0);
+
+    private static int LastMillisecond => (int)Math.Round(DegaussEnvelope.TotalSeconds * 1000.0);
+
     [Fact]
     public void EverythingButPhaseIsZeroBeforeTheDelay()
     {
@@ -34,7 +38,7 @@ public sealed class DegaussEnvelopeTests
     {
         List<double> samples = new();
 
-        for (int i = 0; i <= 1900; i++)
+        for (int i = 0; i <= LastMillisecond; i++)
         {
             samples.Add(DegaussEnvelope.At(i / 1000.0, false).Amplitude);
         }
@@ -48,6 +52,7 @@ public sealed class DegaussEnvelopeTests
             }
         }
 
+        Assert.True(peakIndex == DelayMillisecond, $"amplitude peaks at t={peakIndex / 1000.0}");
         Assert.True(samples[peakIndex] > 0.0, "the envelope never rises above zero");
 
         for (int i = peakIndex; i < samples.Count; i++)
@@ -63,7 +68,7 @@ public sealed class DegaussEnvelopeTests
 
         Assert.True(previous > 0.0);
 
-        for (int i = 121; i <= 1900; i++)
+        for (int i = DelayMillisecond + 1; i <= LastMillisecond; i++)
         {
             double brightness = DegaussEnvelope.At(i / 1000.0, false).Brightness;
 
@@ -75,7 +80,7 @@ public sealed class DegaussEnvelopeTests
     [Fact]
     public void ReducedMotionKeepsBrightnessAtZeroAtEverySampledTime()
     {
-        for (int i = 0; i <= 1900; i++)
+        for (int i = 0; i <= LastMillisecond; i++)
         {
             DegaussFrame frame = DegaussEnvelope.At(i / 1000.0, true);
 
@@ -86,7 +91,7 @@ public sealed class DegaussEnvelopeTests
     [Fact]
     public void ReducedMotionLimitsAmplitudeAndRgbShiftToThirtyFivePercent()
     {
-        for (int i = 0; i <= 1900; i++)
+        for (int i = 0; i <= LastMillisecond; i++)
         {
             double seconds = i / 1000.0;
 

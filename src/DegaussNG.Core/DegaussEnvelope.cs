@@ -13,10 +13,11 @@ public readonly record struct DegaussFrame(
 /// <summary>
 /// The decay curve of a degauss run. It is quiet before the delay and from the
 /// total length on, and brightness is a single pulse that never rises again.
+/// The delay covers the silent start of the sound and the relay, so the picture begins with the thump.
 /// </summary>
 public static class DegaussEnvelope
 {
-    public const double DelaySeconds = 0.12;
+    public const double DelaySeconds = 0.29;
     public const double DecaySeconds = 1.78;
     public const double TotalSeconds = DelaySeconds + DecaySeconds;
 
