@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>DegaussNG</RootNamespace>
+    <AssemblyName>DegaussNG</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DegaussNG.Core\DegaussNG.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Shaders\Degauss.hlsl" LogicalName="DegaussNG.Shaders.Degauss.hlsl" />
+    <EmbeddedResource Include="..\..\assets\sounds\degauss.wav" LogicalName="DegaussNG.assets.sounds.degauss.wav" />
+  </ItemGroup>
+
+</Project>

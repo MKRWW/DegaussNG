@@ -156,8 +156,9 @@ skips the overlay, logs the reason, and still plays the sound.
 
 1. `RunGate.TryEnter`. A trigger during a running effect is ignored.
 2. Capture every monitor first, in physical pixels: `EnumDisplayMonitors`, `GetMonitorInfo`
-   (`rcMonitor`), `BitBlt` with `SRCCOPY | CAPTUREBLT`, `Imaging.CreateBitmapSourceFromHBitmap`,
-   `Freeze`, then release every GDI handle in `finally`. No overlay exists during capture, so it
+   (`rcMonitor`), `BitBlt` with `SRCCOPY | CAPTUREBLT`, `GetDIBits` into a `Bgr32` `BitmapSource`
+   because the alpha byte of a screen bitmap is undefined, `Freeze`, then release every GDI handle
+   in `finally`. No overlay exists during capture, so it
    can never photograph itself.
 3. Create one `OverlayWindow` per monitor, start the sound, drive the effect from
    `CompositionTarget.Rendering` with a `Stopwatch` and `DegaussEnvelope.At`.
@@ -167,11 +168,11 @@ skips the overlay, logs the reason, and still plays the sound.
    5 seconds, regardless of the state of the render loop.
 
 `OverlayWindow` is a code-only WPF window: `WindowStyle.None`, `ResizeMode.NoResize`, `Topmost`,
-`ShowInTaskbar` false, `ShowActivated` false, `AllowsTransparency` false, with an `Image` using
-`Stretch.Fill`. In `SourceInitialized` it adds `WS_EX_LAYERED | WS_EX_TRANSPARENT |
-WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`, calls `SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)`,
-and places itself with `SetWindowPos` on the physical monitor rectangle using `SWP_NOACTIVATE`.
-`app.manifest` declares `PerMonitorV2` DPI awareness.
+`ShowInTaskbar` false, `ShowActivated` false, `AllowsTransparency` true, with an `Image` using
+`Stretch.Fill`. In `SourceInitialized` it adds `WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
+WS_EX_TOOLWINDOW` and places itself with `SetWindowPos` on the physical monitor rectangle using
+`SWP_NOACTIVATE`. On `ContentRendered` it is placed again, because a DPI change while moving
+rescales it. `app.manifest` declares `PerMonitorV2` DPI awareness.
 
 ### Sound (`tools/SoundSynth`)
 
@@ -212,7 +213,7 @@ takes a baseline, and after the last cycle it measures again. It writes exactly 
 `cycles=<n> failed=<n> gdiDelta=<n> userDelta=<n> privateDeltaMB=<n.n>`
 
 Exit code 0 only when `failed=0`, `gdiDelta <= 5`, `userDelta <= 5` and `privateDeltaMB <= 40`.
-The self-test ignores the single-instance mutex.
+A run that shows no overlay counts as failed. The self-test ignores the single-instance mutex.
 
 ## Acceptance criteria
 
