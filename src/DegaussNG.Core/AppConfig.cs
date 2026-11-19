@@ -1,6 +1,15 @@
 namespace DegaussNG.Core;
 
 /// <summary>
+/// The two modem sound modes. Short is the default, Full is for purists.
+/// </summary>
+public static class ModemModes
+{
+    public const string Short = "Short";
+    public const string Full = "Full";
+}
+
+/// <summary>
 /// The settings of the tray app. All values are stored as JSON and are always
 /// read back through <see cref="Normalized"/>.
 /// </summary>
@@ -17,8 +26,13 @@ public sealed record AppConfig
 
     public string Hotkey { get; init; } = "Ctrl+Alt+D";
 
+    public bool ModemEnabled { get; init; } = true;
+
+    public string ModemMode { get; init; } = ModemModes.Short;
+
     /// <summary>
-    /// Returns a copy with Volume clamped to 0..1 and an invalid Hotkey replaced by the default.
+    /// Returns a copy with Volume clamped to 0..1, an invalid Hotkey replaced by the default and
+    /// ModemMode mapped to Short or Full.
     /// </summary>
     public AppConfig Normalized()
     {
@@ -28,12 +42,18 @@ public sealed record AppConfig
             ? gesture.ToString()
             : DefaultHotkeyText;
 
+        string mode = string.Equals(ModemMode, ModemModes.Full, StringComparison.OrdinalIgnoreCase)
+            ? ModemModes.Full
+            : ModemModes.Short;
+
         return new AppConfig
         {
             DegaussEnabled = DegaussEnabled,
             ReducedMotion = ReducedMotion,
             Volume = volume,
             Hotkey = hotkey,
+            ModemEnabled = ModemEnabled,
+            ModemMode = mode,
         };
     }
 }

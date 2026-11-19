@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Net.NetworkInformation;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -23,6 +25,11 @@ public partial class App : Application
         Dispatcher.UnhandledException += OnDispatcherUnhandledException;
 
         if (StartSelfTest(e.Args))
+        {
+            return;
+        }
+
+        if (WriteNetState(e.Args))
         {
             return;
         }
@@ -74,6 +81,59 @@ public partial class App : Application
 
             Shutdown();
         }));
+
+        return true;
+    }
+
+    private bool WriteNetState(string[] args)
+    {
+        if (args.Length < 2 || args[0] != "--netstate")
+        {
+            return false;
+        }
+
+        string logPath = args[1];
+
+        // The report runs without tray, hotkey, sound or config access and ignores the mutex.
+        StringBuilder report = new StringBuilder();
+        report.AppendLine("connected=" + (NetworkWatcher.IsConnected() ? "true" : "false"));
+
+        try
+        {
+            foreach (NetworkInterface adapter in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                report.AppendLine(string.Join(
+                    "|",
+                    adapter.Name,
+                    adapter.NetworkInterfaceType.ToString(),
+                    adapter.OperationalStatus.ToString(),
+                    "real=" + (AdapterRules.IsRealAdapter(adapter.NetworkInterfaceType, adapter.Name, adapter.Description) ? "true" : "false"),
+                    "gateway=" + (NetworkWatcher.HasDefaultGateway(adapter) ? "true" : "false")));
+            }
+        }
+        catch (Exception exception)
+        {
+            Log.Error("netstate report failed: " + exception.Message);
+        }
+
+        try
+        {
+            string? directory = Path.GetDirectoryName(logPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(logPath, report.ToString());
+        }
+        catch (Exception exception)
+        {
+            Log.Error("netstate report could not be written: " + exception.Message);
+        }
+
+        Environment.ExitCode = 0;
+
+        Shutdown();
 
         return true;
     }

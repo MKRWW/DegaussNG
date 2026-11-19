@@ -204,7 +204,8 @@ Sections run in the listed order without gaps. Durations are in seconds.
 - AC11: In both modes the first 0.20 s are exactly 0, the peak is at most -6 dBFS and the last sample is 0.
 - AC12: In `dialtone`, the Goertzel power at 350 Hz and at 440 Hz is each at least 5 times the power at 1000 Hz.
 - AC13: In both modes all seven digits of `dtmf` decode to 5550199 from the strongest low tone out of
-  697, 770, 852, 941 Hz and the strongest high tone out of 1209, 1336, 1477 Hz.
+  697, 770, 852, 941 Hz and the strongest high tone out of 1209, 1336, 1477 Hz. The pause after each
+  of the first six digits, without its first 10 ms, has at most one tenth of the RMS level of the digit.
 - AC14: In `answer`, the power at 2100 Hz is at least 20 times the power at 1000 Hz and at 3000 Hz. In
   full mode the phase at 2100 Hz differs by pi plus or minus 0.5 radians between the 50 ms before and
   the 50 ms after the first reversal.

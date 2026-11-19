@@ -22,6 +22,48 @@ public sealed class ConfigStoreTests
         Assert.Equal("Ctrl+Alt+D", config.Hotkey);
         Assert.False(config.ReducedMotion);
         Assert.True(config.DegaussEnabled);
+        Assert.True(config.ModemEnabled);
+        Assert.Equal(ModemModes.Short, config.ModemMode);
+    }
+
+    [Fact]
+    public void AConfigWithoutModemFieldsLoadsTheModemDefaults()
+    {
+        string path = NewPath();
+        File.WriteAllText(path, "{\"Volume\": 0.4}");
+
+        AppConfig config = new ConfigStore(path).Load();
+
+        Assert.True(config.ModemEnabled);
+        Assert.Equal(ModemModes.Short, config.ModemMode);
+    }
+
+    [Fact]
+    public void FullIsAcceptedIgnoringCaseAndAnythingElseBecomesShort()
+    {
+        string path = NewPath();
+        File.WriteAllText(path, "{\"ModemMode\": \"full\"}");
+
+        Assert.Equal(ModemModes.Full, new ConfigStore(path).Load().ModemMode);
+
+        path = NewPath();
+        File.WriteAllText(path, "{\"ModemMode\": \"nonsense\"}");
+
+        Assert.Equal(ModemModes.Short, new ConfigStore(path).Load().ModemMode);
+    }
+
+    [Fact]
+    public void ModemDisabledSurvivesASaveAndLoad()
+    {
+        string path = NewPath();
+        ConfigStore store = new(path);
+
+        store.Save(new AppConfig { ModemEnabled = false, ModemMode = ModemModes.Full });
+
+        AppConfig loaded = store.Load();
+
+        Assert.False(loaded.ModemEnabled);
+        Assert.Equal(ModemModes.Full, loaded.ModemMode);
     }
 
     [Fact]
@@ -77,6 +119,29 @@ public sealed class ConfigStoreTests
         File.WriteAllText(path, "{\"Hotkey\": \"Ctrl+Foo\"}");
 
         Assert.Equal("Ctrl+Alt+D", new ConfigStore(path).Load().Hotkey);
+    }
+
+    [Fact]
+    public void SaveWritesTheNormalizedMode()
+    {
+        string path = NewPath();
+        new ConfigStore(path).Save(new AppConfig { ModemMode = "full" });
+
+        Assert.Contains("\"Full\"", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void ModemFieldsRoundTripTogetherWithTheOtherFields()
+    {
+        string path = NewPath();
+        ConfigStore store = new(path);
+
+        AppConfig config = new AppConfig { Volume = 0.75, Hotkey = "Ctrl+Alt+X", ModemEnabled = false, ModemMode = ModemModes.Full };
+        store.Save(config);
+
+        AppConfig loaded = store.Load();
+
+        Assert.Equal(config, loaded);
     }
 
     [Fact]
