@@ -18,6 +18,7 @@ internal sealed class TrayController : IDisposable
     private readonly TrayIconFactory _iconFactory = new();
     private readonly RunGate _gate = new();
     private readonly DegaussRunner _runner;
+    private readonly BootRunner _boot;
     private readonly HotkeyService _hotkey;
     private readonly NetworkWatcher _watcher;
     private readonly ContextMenuStrip _menu;
@@ -26,6 +27,8 @@ internal sealed class TrayController : IDisposable
     private readonly ToolStripMenuItem _enabledItem;
     private readonly ToolStripMenuItem _motionItem;
     private readonly ToolStripMenuItem _modemSoundItem;
+    private readonly ToolStripMenuItem _bootItem;
+    private readonly ToolStripMenuItem _autostartItem;
     private readonly List<ToolStripMenuItem> _volumeItems = new();
     private readonly List<ToolStripMenuItem> _modeItems = new();
 
@@ -38,6 +41,7 @@ internal sealed class TrayController : IDisposable
         _config = store.Load();
 
         _runner = new DegaussRunner(_gate, _config, _player);
+        _boot = new BootRunner(_gate, _config, _player);
         _hotkey = new HotkeyService(gesture =>
         {
             // With the hotkey turned off, the trigger does nothing, but "Degauss now" still works.
@@ -66,6 +70,16 @@ internal sealed class TrayController : IDisposable
             CheckOnClick = true,
             Checked = _config.ModemEnabled,
         };
+        _bootItem = new ToolStripMenuItem("Boot screen at startup")
+        {
+            CheckOnClick = true,
+            Checked = _config.BootEnabled,
+        };
+        _autostartItem = new ToolStripMenuItem("Start with Windows")
+        {
+            CheckOnClick = true,
+            Checked = Autostart.IsEnabled(),
+        };
 
         BuildMenu();
 
@@ -80,6 +94,9 @@ internal sealed class TrayController : IDisposable
         _icon.MouseDown += (_, _) => _player.StopModem();
         _icon.Click += (_, _) => _player.StopModem();
         _menu.Opening += (_, _) => _player.StopModem();
+
+        // The sign-in entry is read again every time the menu opens.
+        _menu.Opening += (_, _) => _autostartItem.Checked = Autostart.IsEnabled();
     }
 
     public void Start()
@@ -94,6 +111,17 @@ internal sealed class TrayController : IDisposable
         _runner.CloseOverlays();
     }
 
+    /// <summary>
+    /// Runs the boot screen when the boot screen is switched on.
+    /// </summary>
+    public void RunBootScreen()
+    {
+        if (_config.BootEnabled)
+        {
+            _boot.Run();
+        }
+    }
+
     private void BuildMenu()
     {
         ToolStripMenuItem degaussItem = new ToolStripMenuItem("Degauss now");
@@ -105,6 +133,11 @@ internal sealed class TrayController : IDisposable
         modemTestItem.Click += (_, _) => _player.PlayModem(_config.ModemMode, _config.Volume);
         _menu.Items.Add(modemTestItem);
 
+        // The boot screen runs from the menu even when the boot screen at startup is off.
+        ToolStripMenuItem bootNowItem = new ToolStripMenuItem("Boot screen now");
+        bootNowItem.Click += (_, _) => _boot.Run();
+        _menu.Items.Add(bootNowItem);
+
         _menu.Items.Add(new ToolStripSeparator());
 
         _enabledItem.Click += (_, _) => Update(config => config with { DegaussEnabled = _enabledItem.Checked });
@@ -115,6 +148,19 @@ internal sealed class TrayController : IDisposable
 
         _modemSoundItem.Click += (_, _) => Update(config => config with { ModemEnabled = _modemSoundItem.Checked });
         _menu.Items.Add(_modemSoundItem);
+
+        _bootItem.Click += (_, _) => Update(config => config with { BootEnabled = _bootItem.Checked });
+        _autostartItem.Click += (_, _) =>
+        {
+            if (_autostartItem.Checked)
+            {
+                Autostart.Enable();
+            }
+            else
+            {
+                Autostart.Disable();
+            }
+        };
 
         ToolStripMenuItem modeMenu = new ToolStripMenuItem("Modem mode");
         foreach (string mode in ModeNames)
@@ -133,6 +179,9 @@ internal sealed class TrayController : IDisposable
         }
 
         _menu.Items.Add(modeMenu);
+
+        _menu.Items.Add(_bootItem);
+        _menu.Items.Add(_autostartItem);
 
         ToolStripMenuItem volumeMenu = new ToolStripMenuItem("Volume");
         foreach (int percent in VolumeSteps)
@@ -223,6 +272,7 @@ internal sealed class TrayController : IDisposable
         _config = transform(_config).Normalized();
         _store.Save(_config);
         _runner.UpdateConfig(_config);
+        _boot.UpdateConfig(_config);
     }
 
     private void ApplyHotkey()
@@ -243,6 +293,7 @@ internal sealed class TrayController : IDisposable
         _disposed = true;
 
         _player.StopModem();
+        _boot.Close();
         _watcher.Dispose();
 
         _icon.Visible = false;
