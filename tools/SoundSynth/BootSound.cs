@@ -3,9 +3,10 @@ using System;
 namespace DegaussNG.SoundSynth;
 
 /// <summary>
-/// The power-on sound of the fake BIOS: the beep, the floppy motor and the head seek.
-/// Every sample is produced by hand from an own xorshift32 generator with a fixed seed, so the
-/// output is byte-for-byte reproducible. 22050 Hz, 16 bit PCM, mono.
+/// The power-on sound of the fake BIOS: the beep, the floppy motor and the head seek. The seek is a
+/// row of separate mechanical clicks, never a tone. Every sample is produced by hand from an own
+/// xorshift32 generator with a fixed seed, so the output is byte-for-byte reproducible.
+/// 22050 Hz, 16 bit PCM, mono.
 /// </summary>
 public static class BootSound
 {
@@ -15,7 +16,7 @@ public static class BootSound
 
     private const double PeakLevel = 0.5011872336272722; // -6 dBFS
     private const int MasterFadeSamples = 441;           // 20 ms
-    private const int EdgeFadeSamples = 1103;            // 50 ms
+    private const int MotorFadeSamples = 1764;           // 80 ms
     private const uint Seed = 0x9E3779B9;
 
     private const double BeepStartSeconds = 0.20;
@@ -26,22 +27,52 @@ public static class BootSound
 
     private const double MotorStartSeconds = 3.20;
     private const double MotorEndSeconds = 5.00;
-    private const double MotorGain = 0.25;
-    private const double MotorFrequency = 120.0;
-    private const double MotorQuality = 2.0;
+    private const double MotorGain = 0.12;
+    private const double MotorFrequency = 400.0;
+    private const double MotorQuality = 0.7;
+    private const double MotorWobbleLevel = 0.1;
+    private const double MotorWobbleFrequency = 5.0;
 
-    private const double SeekStartSeconds = 3.30;
-    private const int Passes = 5;
-    private const int StepsPerPass = 16;
-    private const double PassStartSeconds = 0.253;
-    private const double StepSeconds = 1.0 / 120.0;
-    private const double StepLengthSeconds = 0.015;
-    private const double FirstFrequency = 700.0;
-    private const double FrequencyRise = 20.0;
+    // One click: the transient, the frame modes and the body.
+    private const int LightClickSamples = 265;  // 12 ms
+    private const int HeavyClickSamples = 882;  // 40 ms
+    private const double ClickLowPassCoefficient = 0.3;
+    private const double ClickNoiseTau = 0.0008;
 
-    private const double ClunkStartSeconds = 4.90;
-    private const double ClunkEndSeconds = 5.00;
-    private const double ClunkFrequency = 180.0;
+    private static readonly (double Level, double Frequency, double Tau)[] FrameModes =
+    {
+        (0.5, 2350.0, 0.003),
+        (0.35, 3710.0, 0.002),
+        (0.25, 5230.0, 0.0015),
+    };
+
+    private const double BodyLevel = 0.25;
+    private const double BodyFrequency = 290.0;
+    private const double BodySpreadBase = 0.9;
+    private const double BodySpread = 0.2;
+    private const double LightBodyTau = 0.003;
+    private const double HeavyBodyTau = 0.008;
+
+    private const double HeavyLowLevel = 0.5;
+    private const double HeavyLowFrequency = 140.0;
+    private const double HeavyLowTau = 0.012;
+
+    // A light step: L = 0.6 (0.85 + 0.3 u), and it starts (u2 - 0.5) * 0.002 s off its nominal time.
+    private const double LightLevelBase = 0.85;
+    private const double LightLevelSwing = 0.3;
+    private const double LightLevel = 0.6;
+    private const double HeavyLevel = 1.0;
+    private const double StepJitterSeconds = 0.002;
+
+    // Seek passes: first second of the pass, number of steps, seconds between two steps.
+    private static readonly (double StartSeconds, int Steps, double StepSeconds)[] Passes =
+    {
+        (3.30, 12, 0.020),
+        (3.62, 12, 0.020),
+        (3.95, 6, 0.012),
+    };
+
+    private static readonly double[] HeavyClackSeconds = { 4.35, 4.60, 4.90 };
 
     public static short[] Render()
     {
@@ -52,7 +83,7 @@ public static class BootSound
         RenderBeep(signal);
         RenderMotor(signal, noise);
         RenderSeek(signal, noise);
-        RenderClunk(signal, noise);
+        RenderClacks(signal, noise);
 
         for (int i = 0; i < signal.Length; i++)
             signal[i] = Math.Tanh(1.2 * signal[i]);
@@ -99,9 +130,9 @@ public static class BootSound
     }
 
     /// <summary>
-    /// White noise through a band-pass at 120 Hz with Q 2, gain 0.25, with a 50 ms linear fade at
-    /// both edges. The filter keeps running after the motor stops, so its tail is what is left in
-    /// the last part of the file.
+    /// White noise through a band-pass at 400 Hz with Q 0.7 and gain 0.12, wobbling with
+    /// 1 + 0.1 sin(2 pi 5 t), with an 80 ms linear fade at both edges. The filter keeps running
+    /// after the motor stops, so its tail is what is left in the last part of the file.
     /// </summary>
     private static void RenderMotor(double[] signal, Xorshift32 noise)
     {
@@ -112,67 +143,98 @@ public static class BootSound
 
         for (int i = 0; i < TotalSamples; i++)
         {
-            double input = i >= start && i < end
-                ? MotorGain * FadeGain(i, start, end) * noise.NextSample()
-                : 0.0;
+            double input = 0.0;
+
+            if (i >= start && i < end)
+            {
+                double seconds = i / (double)SampleRate;
+                double wobble = 1.0 + MotorWobbleLevel * Math.Sin(2.0 * Math.PI * MotorWobbleFrequency * seconds);
+
+                input = MotorGain * FadeGain(i, start, end) * wobble * noise.NextSample();
+            }
 
             signal[i] += bandPass.Process(input);
         }
     }
 
     /// <summary>
-    /// Five passes of sixteen steps, one step every 1/120 s and each step 15 ms long. The
-    /// frequencies start at 700 Hz and rise 20 Hz per step; an odd pass runs the same tones
-    /// downwards.
+    /// The seek: three passes of separate light steps. Every step draws its own level and its own
+    /// place off the nominal time, so the row of clicks is not a grid.
     /// </summary>
     private static void RenderSeek(double[] signal, Xorshift32 noise)
     {
-        int stepLength = (int)Math.Round(StepLengthSeconds * SampleRate);
-
-        for (int pass = 0; pass < Passes; pass++)
+        foreach ((double passStart, int steps, double stepSeconds) in Passes)
         {
-            double passStart = SeekStartSeconds + PassStartSeconds * pass;
-
-            for (int step = 0; step < StepsPerPass; step++)
+            for (int step = 0; step < steps; step++)
             {
-                int stepStart = Index(passStart + step * StepSeconds);
+                double u = noise.NextUnit();
+                double u2 = noise.NextUnit();
 
-                double frequency = pass % 2 == 0
-                    ? FirstFrequency + FrequencyRise * step
-                    : FirstFrequency + FrequencyRise * (StepsPerPass - 1 - step);
+                double level = LightLevel * (LightLevelBase + LightLevelSwing * u);
+                double seconds = passStart + step * stepSeconds + (u2 - 0.5) * StepJitterSeconds;
 
-                for (int i = stepStart; i < stepStart + stepLength && i < TotalSamples; i++)
-                {
-                    double t = (i - stepStart) / (double)SampleRate;
-
-                    signal[i] += noise.NextSample() * 0.6 * Math.Exp(-t / 0.002)
-                        + 0.5 * Math.Sin(2.0 * Math.PI * frequency * t) * Math.Exp(-t / 0.01);
-                }
+                RenderClick(signal, noise, Index(seconds), LightClickSamples, level, false);
             }
         }
     }
 
-    private static void RenderClunk(double[] signal, Xorshift32 noise)
+    private static void RenderClacks(double[] signal, Xorshift32 noise)
     {
-        int start = Index(ClunkStartSeconds);
-        int end = Index(ClunkEndSeconds);
+        foreach (double seconds in HeavyClackSeconds)
+            RenderClick(signal, noise, Index(seconds), HeavyClickSamples, HeavyLevel, true);
+    }
 
-        for (int i = start; i < end; i++)
+    /// <summary>
+    /// One click at local time t, L times the sum of the high-passed transient, the frame modes and
+    /// the body. The heavy clack keeps the long body and adds the low frame tone.
+    /// </summary>
+    private static void RenderClick(double[] signal, Xorshift32 noise, int start, int length, double level, bool heavy)
+    {
+        double bodyTau = heavy ? HeavyBodyTau : LightBodyTau;
+        double lowPass = 0.0;
+
+        // Every click draws its own body pitch and its own phases, so repeated clicks never
+        // line up into a tone.
+        double bodyFrequency = BodyFrequency * (BodySpreadBase + BodySpread * noise.NextUnit());
+
+        double[] modePhases = new double[FrameModes.Length];
+        for (int mode = 0; mode < FrameModes.Length; mode++)
+            modePhases[mode] = 2.0 * Math.PI * noise.NextUnit();
+
+        double bodyPhase = 2.0 * Math.PI * noise.NextUnit();
+        double lowPhase = 2.0 * Math.PI * noise.NextUnit();
+
+        for (int i = 0; i < length && start + i < TotalSamples; i++)
         {
-            double t = (i - start) / (double)SampleRate;
+            double t = i / (double)SampleRate;
 
-            signal[i] += 0.8 * Math.Sin(2.0 * Math.PI * ClunkFrequency * t) * Math.Exp(-t / 0.03)
-                + noise.NextSample() * Math.Exp(-t / 0.004);
+            double raw = noise.NextSample();
+            lowPass += ClickLowPassCoefficient * (raw - lowPass);
+
+            double value = (raw - lowPass) * Math.Exp(-t / ClickNoiseTau);
+
+            for (int mode = 0; mode < FrameModes.Length; mode++)
+            {
+                (double modeLevel, double frequency, double tau) = FrameModes[mode];
+                value += modeLevel * Math.Sin(2.0 * Math.PI * frequency * t + modePhases[mode]) * Math.Exp(-t / tau);
+            }
+
+            value += BodyLevel * Math.Sin(2.0 * Math.PI * bodyFrequency * t + bodyPhase) * Math.Exp(-t / bodyTau);
+
+            if (heavy)
+                value += HeavyLowLevel * Math.Sin(2.0 * Math.PI * HeavyLowFrequency * t + lowPhase) * Math.Exp(-t / HeavyLowTau);
+
+            signal[start + i] += level * value;
         }
     }
 
     private static double FadeGain(int index, int start, int end)
     {
-        if (index < start + EdgeFadeSamples)
-            return (index - start) / (double)(EdgeFadeSamples - 1);
+        if (index < start + MotorFadeSamples)
+            return (index - start) / (double)(MotorFadeSamples - 1);
 
-        if (index >= end - EdgeFadeSamples)
-            return (EdgeFadeSamples - 1 - (index - (end - EdgeFadeSamples))) / (double)(EdgeFadeSamples - 1);
+        if (index >= end - MotorFadeSamples)
+            return (MotorFadeSamples - 1 - (index - (end - MotorFadeSamples))) / (double)(MotorFadeSamples - 1);
 
         return 1.0;
     }
@@ -254,6 +316,11 @@ public static class BootSound
         public double NextSample()
         {
             return Next() / 2147483648.0 - 1.0;
+        }
+
+        public double NextUnit()
+        {
+            return Next() / 4294967296.0;
         }
     }
 

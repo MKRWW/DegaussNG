@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text;
 using DegaussNG.SoundSynth;
 using Xunit;
@@ -45,7 +45,7 @@ public sealed class BootSoundTests
     public void TheSilentStartStaysSilentAndTheFadeEndsOnZero()
     {
         short[] samples = BootSound.Render();
-        int silent = (int)Math.Round(0.20 * SampleRate);
+        int silent = Index(0.20);
 
         for (int i = 0; i < silent; i++)
             Assert.Equal(0, samples[i]);
@@ -65,8 +65,8 @@ public sealed class BootSoundTests
     public void BeepHoldsThePowerOnTone()
     {
         short[] samples = BootSound.Render();
-        int start = (int)Math.Round(0.20 * SampleRate);
-        int end = (int)Math.Round(0.35 * SampleRate);
+        int start = Index(0.20);
+        int end = Index(0.35);
 
         double tone = Power(samples, start, end, 1000.0);
         double other = Power(samples, start, end, 1500.0);
@@ -78,22 +78,83 @@ public sealed class BootSoundTests
     public void BetweenTheBeepAndTheMotorNothingIsAboveTwo()
     {
         short[] samples = BootSound.Render();
-        int start = (int)Math.Round(0.50 * SampleRate);
-        int end = (int)Math.Round(3.15 * SampleRate);
+        int start = Index(0.50);
+        int end = Index(3.15);
 
         for (int i = start; i < end; i++)
             Assert.True(Math.Abs((double)samples[i]) <= 2.0, $"sample {i} is {samples[i]}");
     }
 
+    // AC13
     [Fact]
-    public void TheSeekIsClearlyLouderThanTheMotorAlone()
+    public void TheSeekIsAtLeastTwiceAsLoudAsTheMotorAlone()
     {
         short[] samples = BootSound.Render();
 
-        double seek = Rms(samples, (int)Math.Round(3.30 * SampleRate), (int)Math.Round(4.45 * SampleRate));
-        double motor = Rms(samples, (int)Math.Round(4.50 * SampleRate), (int)Math.Round(4.85 * SampleRate));
+        double seek = Rms(samples, Index(3.30), Index(4.05));
+        double motor = Rms(samples, Index(4.10), Index(4.30));
 
         Assert.True(seek >= 2.0 * motor, $"seek rms {seek:F1} against motor rms {motor:F1}");
+    }
+
+    // AC16
+    [Fact]
+    public void NoFrequencyOfTheSeekHoldsAFifthOfThePower()
+    {
+        short[] samples = BootSound.Render();
+        int start = Index(3.30);
+        int end = Index(4.05);
+
+        double[] powers = new double[77];
+        double sum = 0.0;
+
+        for (int i = 0; i < powers.Length; i++)
+        {
+            powers[i] = Goertzel(samples, start, end, 200.0 + 50.0 * i);
+            sum += powers[i];
+        }
+
+        for (int i = 0; i < powers.Length; i++)
+        {
+            double frequency = 200.0 + 50.0 * i;
+            Assert.True(powers[i] <= 0.20 * sum, $"{frequency:F0} Hz holds {100.0 * powers[i] / sum:F1} percent");
+        }
+    }
+
+    // AC17
+    [Fact]
+    public void EveryStepOfPassAIsASeparateClick()
+    {
+        short[] samples = BootSound.Render();
+
+        for (int step = 0; step < 12; step++)
+        {
+            int start = Index(3.30 + step * 0.020 - 0.001);
+            int end = start + Index(0.020);
+
+            double peak = 0.0;
+            int peakAt = start;
+
+            for (int i = start; i < end; i++)
+            {
+                double magnitude = Math.Abs((double)samples[i]);
+
+                if (magnitude > peak)
+                {
+                    peak = magnitude;
+                    peakAt = i;
+                }
+            }
+
+            Assert.True(peakAt < start + Index(0.004), $"step {step}: peak is at {(peakAt - start) / SampleRate * 1000.0:F1} ms");
+
+            double late = 0.0;
+
+            for (int i = start + Index(0.013); i < start + Index(0.019); i++)
+                late = Math.Max(late, Math.Abs((double)samples[i]));
+
+            Assert.True(late <= peak / 5.0, $"step {step}: late {late:F1} against peak {peak:F1}");
+        }
     }
 
     private static double Rms(short[] samples, int start, int end)
@@ -122,6 +183,29 @@ public sealed class BootSoundTests
         }
 
         return real * real + imaginary * imaginary;
+    }
+
+    private static double Goertzel(short[] samples, int start, int end, double frequency)
+    {
+        double omega = 2.0 * Math.PI * frequency / SampleRate;
+        double coefficient = 2.0 * Math.Cos(omega);
+
+        double previous = 0.0;
+        double before = 0.0;
+
+        for (int n = start; n < end; n++)
+        {
+            double current = samples[n] + coefficient * previous - before;
+            before = previous;
+            previous = current;
+        }
+
+        return previous * previous + before * before - coefficient * previous * before;
+    }
+
+    private static int Index(double seconds)
+    {
+        return (int)Math.Round(seconds * SampleRate);
     }
 
     private static byte[] Asset(string fileName)
