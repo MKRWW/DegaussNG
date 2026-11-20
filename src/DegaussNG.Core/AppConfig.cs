@@ -30,6 +30,8 @@ public sealed record AppConfig
 
     public string ModemMode { get; init; } = ModemModes.Short;
 
+    public bool BootEnabled { get; init; } = true;
+
     /// <summary>
     /// Returns a copy with Volume clamped to 0..1, an invalid Hotkey replaced by the default and
     /// ModemMode mapped to Short or Full.
@@ -54,6 +56,7 @@ public sealed record AppConfig
             Hotkey = hotkey,
             ModemEnabled = ModemEnabled,
             ModemMode = mode,
+            BootEnabled = BootEnabled,
         };
     }
 }

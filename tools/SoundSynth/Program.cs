@@ -9,6 +9,7 @@ internal static class Program
         WavWriter.WriteFile(Path.Combine(directory, "degauss.wav"), DegaussSound.Render(), DegaussSound.SampleRate);
         WavWriter.WriteFile(Path.Combine(directory, "modem-short.wav"), ModemSound.RenderShort(), ModemSound.SampleRate);
         WavWriter.WriteFile(Path.Combine(directory, "modem-full.wav"), ModemSound.RenderFull(), ModemSound.SampleRate);
+        WavWriter.WriteFile(Path.Combine(directory, "boot.wav"), BootSound.Render(), BootSound.SampleRate);
 
         return 0;
     }

@@ -24,6 +24,7 @@
     <EmbeddedResource Include="..\..\assets\sounds\degauss.wav" LogicalName="DegaussNG.assets.sounds.degauss.wav" />
     <EmbeddedResource Include="..\..\assets\sounds\modem-short.wav" LogicalName="DegaussNG.assets.sounds.modem-short.wav" />
     <EmbeddedResource Include="..\..\assets\sounds\modem-full.wav" LogicalName="DegaussNG.assets.sounds.modem-full.wav" />
+    <EmbeddedResource Include="..\..\assets\sounds\boot.wav" LogicalName="DegaussNG.assets.sounds.boot.wav" />
   </ItemGroup>
 
 </Project>

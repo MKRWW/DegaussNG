@@ -67,6 +67,27 @@ public sealed class ConfigStoreTests
     }
 
     [Fact]
+    public void AConfigWithoutBootFieldsLoadsTheBootDefaults()
+    {
+        string path = NewPath();
+        File.WriteAllText(path, "{\"Volume\": 0.4}");
+
+        Assert.True(new ConfigStore(path).Load().BootEnabled);
+    }
+
+    [Fact]
+    public void BootDisabledSurvivesASaveAndLoadAndNormalized()
+    {
+        string path = NewPath();
+        ConfigStore store = new(path);
+
+        store.Save(new AppConfig { BootEnabled = false });
+
+        Assert.False(store.Load().BootEnabled);
+        Assert.False(new AppConfig { BootEnabled = false }.Normalized().BootEnabled);
+    }
+
+    [Fact]
     public void CorruptFileIsMovedToBackupAndDefaultsAreReturned()
     {
         string path = NewPath();

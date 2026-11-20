@@ -17,6 +17,7 @@ internal sealed class SoundPlayer
     private const string ResourceName = "DegaussNG.assets.sounds.degauss.wav";
     private const string ShortModemResourceName = "DegaussNG.assets.sounds.modem-short.wav";
     private const string FullModemResourceName = "DegaussNG.assets.sounds.modem-full.wav";
+    private const string BootResourceName = "DegaussNG.assets.sounds.boot.wav";
 
     // A short output buffer keeps the thump in step with the picture.
     private const int DesiredLatencyMilliseconds = 120;
@@ -24,6 +25,7 @@ internal sealed class SoundPlayer
     private readonly List<Session> _sessions = new();
 
     private Session? _modem;
+    private Session? _boot;
 
     public void Play(double volume)
     {
@@ -105,6 +107,58 @@ internal sealed class SoundPlayer
         session.Player.Stop();
     }
 
+    /// <summary>
+    /// Plays the boot sound. While one is running, a further call does nothing.
+    /// </summary>
+    public void PlayBoot(double volume)
+    {
+        if (_boot != null)
+        {
+            return;
+        }
+
+        Session? session = null;
+
+        try
+        {
+            session = OpenSession(BootResourceName);
+            if (session == null)
+            {
+                return;
+            }
+
+            _boot = session;
+            Start(session, volume);
+        }
+        catch (Exception exception)
+        {
+            if (session != null)
+            {
+                _sessions.Remove(session);
+                session.Dispose();
+            }
+
+            _boot = null;
+            Log.Error("audio playback failed: " + exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Stops the running boot sound. Without one it does nothing.
+    /// </summary>
+    public void StopBoot()
+    {
+        if (_boot == null)
+        {
+            return;
+        }
+
+        Session session = _boot;
+        _boot = null;
+
+        session.Player.Stop();
+    }
+
     private Session? OpenSession(string resourceName)
     {
         Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
@@ -141,6 +195,11 @@ internal sealed class SoundPlayer
         if (ReferenceEquals(session, _modem))
         {
             _modem = null;
+        }
+
+        if (ReferenceEquals(session, _boot))
+        {
+            _boot = null;
         }
 
         session.Dispose();

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Text;
@@ -16,6 +17,7 @@ public partial class App : Application
     private Mutex? _mutex;
     private TrayController? _tray;
     private int? _selfTestExitCode;
+    private int? _bootExitCode;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -34,6 +36,11 @@ public partial class App : Application
             return;
         }
 
+        if (RunBootScreen(e.Args))
+        {
+            return;
+        }
+
         _mutex = new Mutex(true, SingleInstanceMutexName, out bool createdNew);
         if (!createdNew)
         {
@@ -44,14 +51,26 @@ public partial class App : Application
 
         _tray = new TrayController(new ConfigStore(ConfigStore.DefaultPath));
         _tray.Start();
+
+        // The sign-in start shows the boot screen once.
+        if (Array.IndexOf(e.Args, AutostartCommand.Argument) >= 0)
+        {
+            _tray.RunBootScreen();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (_selfTestExitCode is int exitCode)
+        if (_selfTestExitCode is int selfTestExitCode)
         {
-            e.ApplicationExitCode = exitCode;
-            Environment.ExitCode = exitCode;
+            e.ApplicationExitCode = selfTestExitCode;
+            Environment.ExitCode = selfTestExitCode;
+        }
+
+        if (_bootExitCode is int bootExitCode)
+        {
+            e.ApplicationExitCode = bootExitCode;
+            Environment.ExitCode = bootExitCode;
         }
 
         _tray?.Dispose();
@@ -134,6 +153,53 @@ public partial class App : Application
         Environment.ExitCode = 0;
 
         Shutdown();
+
+        return true;
+    }
+
+    private bool RunBootScreen(string[] args)
+    {
+        if (args.Length < 2 || args[0] != "--boot")
+        {
+            return false;
+        }
+
+        string logPath = args[1];
+
+        // The gate run happens without tray, hotkey or config access and ignores the mutex.
+        Dispatcher.BeginInvoke(new Action(async () =>
+        {
+            SoundPlayer player = new();
+            BootRunner runner = new BootRunner(new RunGate(), new AppConfig { Volume = 0.5, ReducedMotion = false }, player);
+
+            BootResult result = await runner.RunAsync();
+
+            string line = string.Format(
+                CultureInfo.InvariantCulture,
+                "monitors={0} closedBy={1} seconds={2:F2}",
+                result.Monitors,
+                result.ClosedBy,
+                result.Seconds);
+
+            try
+            {
+                string? directory = Path.GetDirectoryName(logPath);
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                File.WriteAllText(logPath, line + Environment.NewLine);
+            }
+            catch (Exception exception)
+            {
+                Log.Error("boot report could not be written: " + exception.Message);
+            }
+
+            _bootExitCode = result.Monitors > 0 ? 0 : 1;
+
+            Shutdown();
+        }));
 
         return true;
     }
