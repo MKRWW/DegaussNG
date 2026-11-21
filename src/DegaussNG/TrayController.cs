@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Windows.Forms;
 using DegaussNG.Core;
 
@@ -12,6 +13,7 @@ internal sealed class TrayController : IDisposable
 {
     private static readonly int[] VolumeSteps = { 10, 30, 50, 70, 100 };
     private static readonly string[] ModeNames = { ModemModes.Short, ModemModes.Full };
+    private static readonly string TooltipText = "DegaussNG " + TooltipVersion();
 
     private readonly ConfigStore _store;
     private readonly SoundPlayer _player = new();
@@ -85,7 +87,7 @@ internal sealed class TrayController : IDisposable
 
         _icon = new NotifyIcon
         {
-            Text = "DegaussNG",
+            Text = TooltipText,
             Icon = _iconFactory.CreateIcon(),
             ContextMenuStrip = _menu,
         };
@@ -265,6 +267,16 @@ internal sealed class TrayController : IDisposable
     private static HotkeyGesture DefaultGesture()
     {
         return HotkeyGesture.TryParse(new AppConfig().Hotkey, out HotkeyGesture gesture) ? gesture : default;
+    }
+
+    /// <summary>
+    /// The version of the running assembly as Major.Minor.Build, for the tooltip.
+    /// </summary>
+    private static string TooltipVersion()
+    {
+        Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+
+        return version == null ? "1.0.0" : version.Major + "." + version.Minor + "." + version.Build;
     }
 
     private void Update(Func<AppConfig, AppConfig> transform)
