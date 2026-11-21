@@ -31,8 +31,30 @@ internal sealed class HotkeyService : IDisposable
 
         HwndSource source = EnsureSource();
 
+        HotkeyGesture previous = _current;
+        bool hadHotkey = _registered;
+
         Unregister();
 
+        if (Register(source, gesture))
+        {
+            return true;
+        }
+
+        // A gesture held by another program must not leave the app without a hotkey.
+        if (hadHotkey)
+        {
+            Register(source, previous);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Registers one gesture and keeps _current and _registered as the hotkey that is active now.
+    /// </summary>
+    private bool Register(HwndSource source, HotkeyGesture gesture)
+    {
         uint modifiers = (uint)gesture.Modifiers | NativeMethods.MOD_NOREPEAT;
 
         if (!NativeMethods.RegisterHotKey(source.Handle, HotkeyId, modifiers, gesture.VirtualKey))

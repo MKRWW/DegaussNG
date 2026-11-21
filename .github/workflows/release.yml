@@ -29,6 +29,19 @@ jobs:
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Check version
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $props = [xml](Get-Content Directory.Build.props -Raw)
+          $propsVersion = $props.Project.PropertyGroup.Version
+
+          if ($propsVersion -ne $env:VERSION) {
+            Write-Error "Directory.Build.props says $propsVersion, but the tag says $env:VERSION. The version is taken from Directory.Build.props, so the tag has to match it."
+            exit 1
+          }
+
       - name: Test
         shell: pwsh
         run: |

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Windows.Threading;
 using DegaussNG.Core;
+using Microsoft.Win32;
 
 namespace DegaussNG;
 
@@ -36,6 +37,7 @@ internal sealed class NetworkWatcher : IDisposable
 
         NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
         NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         _timer = new DispatcherTimer(TickInterval, DispatcherPriority.Normal, OnTick, _dispatcher);
         _timer.Start();
@@ -105,6 +107,21 @@ internal sealed class NetworkWatcher : IDisposable
         ReportOnDispatcher();
     }
 
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != PowerModes.Suspend)
+        {
+            return;
+        }
+
+        if (_disposed)
+        {
+            return;
+        }
+
+        _dispatcher.BeginInvoke(new Action(() => _debouncer?.Suspend(_clock.Elapsed)));
+    }
+
     private void ReportOnDispatcher()
     {
         if (_disposed)
@@ -147,6 +164,9 @@ internal sealed class NetworkWatcher : IDisposable
 
         NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+
+        // The power events come from a static class, so the handler has to go.
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
 
         if (_timer != null)
         {

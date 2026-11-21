@@ -162,6 +162,9 @@ internal sealed class TrayController : IDisposable
             {
                 Autostart.Disable();
             }
+
+            // The check shows what the registry holds, not what was clicked.
+            _autostartItem.Checked = Autostart.IsEnabled();
         };
 
         ToolStripMenuItem modeMenu = new ToolStripMenuItem("Modem mode");
@@ -255,13 +258,27 @@ internal sealed class TrayController : IDisposable
         HotkeyDialog dialog = new HotkeyDialog(current);
 
         // The gesture is saved only when the dialog is closed with OK.
-        if (dialog.ShowDialog() == true)
+        if (dialog.ShowDialog() != true)
         {
-            _config = _config with { Hotkey = dialog.Result.ToString() };
-            _store.Save(_config);
-            _runner.UpdateConfig(_config);
-            ApplyHotkey();
+            return;
         }
+
+        AppConfig candidate = _config with { Hotkey = dialog.Result.ToString() };
+
+        if (!_hotkey.Apply(candidate))
+        {
+            _icon.ShowBalloonTip(
+                2000,
+                "DegaussNG",
+                "Hotkey " + dialog.Result.ToString() + " could not be registered. " + current.ToString() + " stays active.",
+                ToolTipIcon.Warning);
+            return;
+        }
+
+        _config = candidate;
+        Save();
+        _runner.UpdateConfig(_config);
+        _boot.UpdateConfig(_config);
     }
 
     private static HotkeyGesture DefaultGesture()
@@ -282,9 +299,24 @@ internal sealed class TrayController : IDisposable
     private void Update(Func<AppConfig, AppConfig> transform)
     {
         _config = transform(_config).Normalized();
-        _store.Save(_config);
         _runner.UpdateConfig(_config);
         _boot.UpdateConfig(_config);
+        Save();
+    }
+
+    /// <summary>
+    /// Saves the config. A failed save is logged and the change stays in memory.
+    /// </summary>
+    private void Save()
+    {
+        try
+        {
+            _store.Save(_config);
+        }
+        catch (Exception exception)
+        {
+            Log.Error("config could not be saved: " + exception.Message);
+        }
     }
 
     private void ApplyHotkey()

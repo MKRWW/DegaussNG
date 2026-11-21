@@ -154,6 +154,70 @@ public sealed class ConnectionDebouncerTests
     }
 
     [Fact]
+    public void ALongDropWithoutPollingCounts()
+    {
+        ConnectionDebouncer debouncer = new ConnectionDebouncer(true);
+
+        debouncer.Report(false, Now(10));
+        debouncer.Report(true, Now(20));
+
+        List<double> fired = new List<double>();
+
+        for (int second = 20; second <= 30; second++)
+        {
+            if (debouncer.Poll(Now(second)))
+                fired.Add(second);
+        }
+
+        Assert.Equal(new List<double> { 24 }, fired);
+    }
+
+    [Fact]
+    public void AConnectionAfterSuspendFiresAfterTheStableTime()
+    {
+        ConnectionDebouncer debouncer = new ConnectionDebouncer(true);
+
+        List<double> fired = new List<double>();
+
+        for (int second = 0; second <= 20; second++)
+        {
+            if (second == 10)
+                debouncer.Suspend(Now(second));
+            if (second == 11)
+                debouncer.Report(true, Now(second));
+
+            if (debouncer.Poll(Now(second)))
+                fired.Add(second);
+        }
+
+        Assert.Equal(new List<double> { 15 }, fired);
+    }
+
+    [Fact]
+    public void AConnectionAfterSuspendWithinTheCooldownStaysSilent()
+    {
+        // The first connection is reported at 1, so the first firing is at 5.
+        ConnectionDebouncer debouncer = new ConnectionDebouncer(false);
+
+        List<double> fired = new List<double>();
+
+        for (int second = 0; second <= 60; second++)
+        {
+            if (second == 1)
+                debouncer.Report(true, Now(second));
+            if (second == 20)
+                debouncer.Suspend(Now(second));
+            if (second == 21)
+                debouncer.Report(true, Now(second));
+
+            if (debouncer.Poll(Now(second)))
+                fired.Add(second);
+        }
+
+        Assert.Equal(new List<double> { 5 }, fired);
+    }
+
+    [Fact]
     public void TheDefaultsAreFourSecondsEightSecondsAndSixtySeconds()
     {
         Assert.Equal(TimeSpan.FromSeconds(4), ConnectionDebouncer.DefaultStableOnline);

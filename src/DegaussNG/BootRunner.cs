@@ -113,9 +113,7 @@ internal sealed class BootRunner
             // A window only gets keys when it is active.
             primary?.Activate();
 
-            await _closed.Task;
-
-            return Result();
+            return await _closed.Task;
         }
         catch (Exception exception)
         {
