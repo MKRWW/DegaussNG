@@ -36,7 +36,8 @@ public sealed class ConnectionDebouncer
     }
 
     /// <summary>
-    /// Records a state. The change time moves only when the state differs.
+    /// Records a state. The change time moves only when the state differs. A long drop counts even
+    /// when no Poll happened during it.
     /// </summary>
     public void Report(bool connected, TimeSpan now)
     {
@@ -45,7 +46,22 @@ public sealed class ConnectionDebouncer
             return;
         }
 
+        if (connected && _confirmed && now - _changeTime >= _minimumOffline)
+        {
+            _confirmed = false;
+        }
+
         _lastReported = connected;
+        _changeTime = now;
+    }
+
+    /// <summary>
+    /// Marks the connection as dropped by a sleep, so the next connection is a real one.
+    /// </summary>
+    public void Suspend(TimeSpan now)
+    {
+        _confirmed = false;
+        _lastReported = false;
         _changeTime = now;
     }
 

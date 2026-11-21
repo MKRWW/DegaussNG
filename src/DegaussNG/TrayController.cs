@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Windows.Forms;
 using DegaussNG.Core;
 
@@ -12,6 +13,7 @@ internal sealed class TrayController : IDisposable
 {
     private static readonly int[] VolumeSteps = { 10, 30, 50, 70, 100 };
     private static readonly string[] ModeNames = { ModemModes.Short, ModemModes.Full };
+    private static readonly string TooltipText = "DegaussNG " + TooltipVersion();
 
     private readonly ConfigStore _store;
     private readonly SoundPlayer _player = new();
@@ -85,7 +87,7 @@ internal sealed class TrayController : IDisposable
 
         _icon = new NotifyIcon
         {
-            Text = "DegaussNG",
+            Text = TooltipText,
             Icon = _iconFactory.CreateIcon(),
             ContextMenuStrip = _menu,
         };
@@ -160,6 +162,9 @@ internal sealed class TrayController : IDisposable
             {
                 Autostart.Disable();
             }
+
+            // The check shows what the registry holds, not what was clicked.
+            _autostartItem.Checked = Autostart.IsEnabled();
         };
 
         ToolStripMenuItem modeMenu = new ToolStripMenuItem("Modem mode");
@@ -253,13 +258,27 @@ internal sealed class TrayController : IDisposable
         HotkeyDialog dialog = new HotkeyDialog(current);
 
         // The gesture is saved only when the dialog is closed with OK.
-        if (dialog.ShowDialog() == true)
+        if (dialog.ShowDialog() != true)
         {
-            _config = _config with { Hotkey = dialog.Result.ToString() };
-            _store.Save(_config);
-            _runner.UpdateConfig(_config);
-            ApplyHotkey();
+            return;
         }
+
+        AppConfig candidate = _config with { Hotkey = dialog.Result.ToString() };
+
+        if (!_hotkey.Apply(candidate))
+        {
+            _icon.ShowBalloonTip(
+                2000,
+                "DegaussNG",
+                "Hotkey " + dialog.Result.ToString() + " could not be registered. " + current.ToString() + " stays active.",
+                ToolTipIcon.Warning);
+            return;
+        }
+
+        _config = candidate;
+        Save();
+        _runner.UpdateConfig(_config);
+        _boot.UpdateConfig(_config);
     }
 
     private static HotkeyGesture DefaultGesture()
@@ -267,12 +286,37 @@ internal sealed class TrayController : IDisposable
         return HotkeyGesture.TryParse(new AppConfig().Hotkey, out HotkeyGesture gesture) ? gesture : default;
     }
 
+    /// <summary>
+    /// The version of the running assembly as Major.Minor.Build, for the tooltip.
+    /// </summary>
+    private static string TooltipVersion()
+    {
+        Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+
+        return version == null ? "1.0.0" : version.Major + "." + version.Minor + "." + version.Build;
+    }
+
     private void Update(Func<AppConfig, AppConfig> transform)
     {
         _config = transform(_config).Normalized();
-        _store.Save(_config);
         _runner.UpdateConfig(_config);
         _boot.UpdateConfig(_config);
+        Save();
+    }
+
+    /// <summary>
+    /// Saves the config. A failed save is logged and the change stays in memory.
+    /// </summary>
+    private void Save()
+    {
+        try
+        {
+            _store.Save(_config);
+        }
+        catch (Exception exception)
+        {
+            Log.Error("config could not be saved: " + exception.Message);
+        }
     }
 
     private void ApplyHotkey()
